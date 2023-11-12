@@ -11,18 +11,6 @@
 # idea: estimate and save the results of all models for each country within 
 # a loop. models correspond to different measures of economic activity x_t
 
-# R object results:
-# postr_models_list
-# ols_models_list
-# postr_slopeNKPC
-# postr_coeffiExpInfl
-# postr_sigma_sq
-
-# postr.stats_slopeNKPC
-# postr.stats_coeffiExpInfl
-# postr.stats_sigma_sq
-# sigma_sq.ols
-
 # to measure the duration of the code
 start.time <- Sys.time()
 
