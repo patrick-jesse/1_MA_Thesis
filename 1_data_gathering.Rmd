@@ -1,0 +1,320 @@
+---
+title: "data_gathering"
+author: "Patrick Gyasi"
+date: "2023-09-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data gathering for a Bayesian linear regression model of the NKPC
+MA Thesis, Summer 2023                                  
+Objective: estimate the slope of the New Keynesian Phillips Curve for the 
+EA-11 country composition in a pooled regression             
+pi_t = a * pi_t+1 + b * x_t + e_t 
+
+
+```{r}
+
+library(tidyverse)
+
+```
+
+
+## Download data
+
+### ECB Data
+
+
+```{r}
+
+country_names_ecb <- c("AT", "BE", "DE", "ES", "FI", "FR", "IE", "IT", "LU", "NL", "PT")
+
+load_ecb_data <- function(str1, str2){
+  
+  # install.packages(c("ecb", "tidyverse"))
+  
+  load_ecb_data <- vector(mode = "list", length = length(country_names_ecb)) # load_ecb_data <- list()
+  names(load_ecb_data) <- country_names_ecb
+  
+  for(i in names(load_ecb_data)) {
+    load_ecb_data[[i]] <- ecb::get_data(
+      paste0(str1, i, str2) 
+    )
+  }
+  
+  load_ecb_data <- do.call(rbind, load_ecb_data) |> # adds row names to the observations
+    dplyr::select(ref_area, obstime, obsvalue) |> 
+    dplyr::rename(
+      country = ref_area,
+      period  = obstime,
+    ) |> 
+    dplyr::arrange(period, country)
+  
+  return(load_ecb_data)
+}
+
+```
+
+
+#### Inflation
+
+##### HICP - All-items excluding energy and food, monthly annual rate of change
+Eurostat, Neither seasonally nor working day adjusted  
+[https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=122.ICP.M.AT.N.XEF000.4.ANR](https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=122.ICP.M.AT.N.XEF000.4.ANR)
+
+```{r}
+# ICP.M.AT.N.XEF000.4.ANR
+hicpX_mon <- load_ecb_data("ICP.M.", ".N.XEF000.4.ANR") |> 
+  filter(between(period, "1998-01", "2022-12")) |> 
+  rename(hicpX_mon = obsvalue)
+
+```
+
+
+##### Unemployment rate
+Total, Age 15 to 74; **seasonally adjusted**, not working day adjusted  
+Unit:	Percent, quarterly  
+[https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=477.IESS.Q.FI.S.UNEHRT.TOTAL0.15_74.T](https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=477.IESS.Q.FI.S.UNEHRT.TOTAL0.15_74.T)
+
+```{r}
+# IESS.Q.FI.S.UNEHRT.TOTAL0.15_74.T
+unemp_rate_adj <- load_ecb_data("IESS.Q.", ".S.UNEHRT.TOTAL0.15_74.T") |> 
+  filter(between(period, "1998-Q1", "2022-Q4")) |> 
+  rename(unemp_rate_adj = obsvalue)
+
+```
+
+
+*GDP at current prices, calendar and seasonally adjusted not available*
+
+Chained volume series (Chain Linking):
+In a chain linked GDP series, we calculate the value of goods and services produced this year using the prices these things cost last year. In that way, we remove the effect of price (value effect) and the remaining GDP growth will be due to more goods and services being produced (volume effect). It is usually the volume effect that is the most meaningful. [Ireland's national statistical office CSO](https://www.cso.ie/en/interactivezone/statisticsexplained/nationalaccountsexplained/chainlinking/)
+
+GDP at chained volume measure is a series of GDP statistics adjusted for the effect of inflation to give a measure of ‘real GDP’.[Economicshelp.org](https://www.economicshelp.org/blog/7397/economics/gdp-at-chained-volume-measure/)
+
+##### Gross domestic product at market prices, quarterly
+Domestic (home or reference area), Total economy   
+Euro, **Chain linked volume** (rebased)  
+Non transformed data, **Calendar and seasonally adjusted** data  
+[https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=320.MNA.Q.Y.LU.W2.S1.S1.B.B1GQ._Z._Z._Z.EUR.LR.N](https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=320.MNA.Q.Y.LU.W2.S1.S1.B.B1GQ._Z._Z._Z.EUR.LR.N)
+
+```{r}
+# MNA.Q.Y.LU.W2.S1.S1.B.B1GQ._Z._Z._Z.EUR.LR.N
+gdp_chain_adj <- load_ecb_data("MNA.Q.Y.", ".W2.S1.S1.B.B1GQ._Z._Z._Z.EUR.LR.N") |> 
+  filter(between(period, "1998-Q1", "2022-Q4")) |> 
+  rename(gdp_chain_adj = obsvalue)
+
+```
+
+
+##### Gross domestic product at market prices, quarterly
+Domestic (home or reference area), Total economy  
+Domestic currency (incl. conversion to current currency made using a fixed parity)  
+*Chain linked volume* (rebased), **Growth rate, over 1 year**  
+*Calendar and seasonally adjusted* data  
+[https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=320.MNA.Q.Y.IE.W2.S1.S1.B.B1GQ._Z._Z._Z.XDC.LR.GY](https://sdw.ecb.europa.eu/quickview.do?SERIES_KEY=320.MNA.Q.Y.IE.W2.S1.S1.B.B1GQ._Z._Z._Z.XDC.LR.GY)
+
+```{r}
+# MNA.Q.Y.IE.W2.S1.S1.B.B1GQ._Z._Z._Z.XDC.LR.GY
+gdp_growth_yoy_adj <- load_ecb_data("MNA.Q.Y.", ".W2.S1.S1.B.B1GQ._Z._Z._Z.XDC.LR.GY") |> 
+  filter(between(period, "1998-Q1", "2022-Q4")) |> 
+  rename(gdp_growth_yoy_adj = obsvalue)
+
+```
+
+
+### OECD Data
+
+#### expected inflation
+
+[OECD Inflation forecast](https://data.oecd.org/price/inflation-forecast.htm)
+[Inflation forecast quarterly](https://data.oecd.org/chart/77YT)
+
+```{r}
+
+link_exp_inf <- "https://stats.oecd.org/sdmx-json/data/DP_LIVE/AUT+BEL+DEU+ESP+FIN+FRA+IRL+ITA+LUX+NLD+PRT.CPIFORECAST.TOT.AGRWTH.Q/OECD?contentType=csv&detail=code&separator=comma&csv-lang=en&startPeriod=1998-Q1&endPeriod=2022-Q4"
+
+exp_infl <- read_csv(link_exp_inf) |> 
+  select(LOCATION, TIME, Value) |> 
+  rename(
+    country  = LOCATION,
+    period   = TIME,
+    exp_infl = Value
+  ) |> 
+  arrange(period, country)
+
+```
+
+
+## Tidy data
+
+standardizing country names
+
+```{r}
+
+country_names_oecd <- unique(exp_infl$country)  # replace with ecb country names
+ 
+for(i in seq_along(country_names_oecd)) {
+  exp_infl$country <- gsub(country_names_oecd[i], 
+                           country_names_ecb[i], 
+                           exp_infl$country
+                           )
+}
+
+```
+
+## compute quarterly data from monthly data for hicpX
+
+```{r}
+
+hicpX_list <- vector(mode = "list", length = length(country_names_ecb))
+names(hicpX_list) <- country_names_ecb
+
+for(i in names(hicpX_list)) {
+  
+  hicpX_geo_quart <- hicpX_mon |> 
+    filter(country == i)
+  
+  hicpX_geo_quart$hicpX <- round(
+    zoo::rollapply(hicpX_geo_quart$hicpX_mon, 
+                   width = 3, FUN = mean,
+                   align = "right", fill = NA),
+    digits = 2)
+  
+  hicpX_geo_quart$period <- as.Date(paste0(hicpX_geo_quart$period, "-01"))
+  hicpX_geo_quart$month  <- format(hicpX_geo_quart$period, format = "%m")
+  
+  hicpX_geo_quart <- na.omit(hicpX_geo_quart) |>
+    filter(month %in% c("03", "06", "09", "12")) |>
+    select(country, period, hicpX)  |> 
+    arrange(period)
+  
+  hicpX_list[[i]] <- hicpX_geo_quart
+  
+}
+
+hicpX <- do.call(rbind, hicpX_list) |> 
+  arrange(period, country)
+
+```
+
+### merging data
+
+```{r}
+data_list <- list(hicpX, exp_infl, unemp_rate_adj, unemp_gap_adj,
+                  gdp_chain_adj, gdp_growth_yoy_adj
+                  ) |> 
+  setNames(c("hicpX", "exp_infl", "unemp_rate_adj",
+             "unemp_gap_adj", "log(gdp_chain_adj)", 
+             "gdp_growth_yoy_adj")
+           )
+
+# standardize period format to YYYY-MM-DD
+quart_char <- paste0("Q", 1:4)
+quart_num <- c(paste0(0, c(3, 6, 9)), 12)
+
+for(i in names(data_list)) {
+  for(j in 1:4) { # standardize period format to YYYY-MM-DD
+    data_list[[i]]$period <- gsub(quart_char[j], quart_num[j],
+                                             data_list[[i]]$period
+    )
+  } # change periode type to date
+  data_list[[i]]$period <- as.Date(
+    paste0(data_list[[i]]$period, "-01")
+  )
+}
+
+# join all quarterly data (keep NA's --> full_join)
+data_NKPC <- data_list |> 
+  reduce(full_join, by = c("period", "country"))
+
+data_NKPC$log_gdp_chain <- log(gdp_chain_adj[, 3, drop = TRUE])
+data_NKPC$gdp_chain_adj <- NULL
+
+data_NKPC <- data_NKPC |> 
+  relocate(log_gdp_chain, .before = gdp_growth_yoy_adj)
+```
+
+#### non-lagged variables
+```{r}
+
+data_NKPC_contemp <- data_list |> 
+  reduce(full_join, by = c("period", "country"))
+
+data_NKPC_contemp$log_gdp_chain <- log(gdp_chain_adj[, 3, drop = TRUE])
+data_NKPC_contemp$gdp_chain_adj <- NULL
+
+data_NKPC_contemp <- data_NKPC_contemp |> 
+  relocate(log_gdp_chain, .before = gdp_growth_yoy_adj)
+
+```
+
+
+#### lag variables
+```{r}
+
+data_NKPC <- data_NKPC |>
+  group_by(country) |> 
+  mutate(
+    unemp_rate_adj     = lag(unemp_rate_adj, n = 4),
+    unemp_gap_adj      = lag(unemp_gap_adj, n = 4),
+    log_gdp_chain      = lag(log_gdp_chain, n = 4),
+    gdp_growth_yoy_adj = lag(gdp_growth_yoy_adj, n = 4)
+  ) |> 
+  ungroup() # |>  
+# filter(period != "1998-09-01":"1998-12-01")
+
+data_NKPC <- data_NKPC[45:1100, ]
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
